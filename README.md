@@ -304,3 +304,227 @@ folder.
 - LaTeX table files in 'results_EU/' (if enabled)
 - Copies of all main figures under 'results_EU/figures/'
 - 'results_EU/RunInfo' sheet with basic metadata (date range, script versions)
+
+## CN pipeline (SSE 50)
+
+This section describes the scripts for the Chinese sample (SSE 50), their inputs/outputs, and how they map to tables and figures in the thesis.
+
+### Step 1 – Daily CN panel and volume
+
+- `step_1_cn_build_panel.py`  
+  **Purpose:** Build a clean daily CN panel with returns and FF5 factors.  
+  **Input:**
+  - `chinese_firms_stock_price.csv` (raw CN prices, possibly with decimal commas)
+  - `Chinese_5_Factors_Daily.xlsx` (FF5 factors with `*1` suffix)  
+  **Output:**
+  - `clean_panel_cn.xlsx` (sheet `Panel` with `Date`, `Ticker`, `Return`, `ExcessReturn`, `Mkt-RF`, `SMB`, `HML`, `RMW`, `CMA`, `RF`)  
+  **Notes:**  
+  - Optionally updates a CN event log (e.g. `SSE 50 Log.xlsx`) by turning bare file names into full paths under `Data Input/`.  
+  - This panel is the base input for later CN steps (AR/CAR and volume).
+
+- `step_1b_cn_add_volume.py`  
+  **Purpose:** Add trading volume to the CN panel.  
+  **Input:**
+  - `clean_panel_cn.xlsx` (from Step 1)
+  - `chinese_firms_stock_price.csv` (must contain at least `ts_code`, `trade_date`, `vol`)  
+  **Output:**
+  - `clean_panel_cn_with_volume.xlsx` (sheet `Panel` with an additional `Volume` column)  
+  **Used in:** CN abnormal-volume analysis (Step 7).
+
+---
+
+### Step 2 – CN AR/CAR and AR-long
+
+- **Final Step 2 (extended)**  
+  **Purpose:** Estimate FF5 betas, abnormal returns, cumulative abnormal returns, and AR-long series for CN EC/QR events.  
+  **Key features:**
+  - Robust date parsing and OLS; drops non-finite observations in the estimation window.
+  - Produces an EU-style AR-long file for dynamic and staggered profiles.  
+  **Output:**
+  - `event_AR_CAR_cn.xlsx`  
+    - Sheets `EC` and `QR` with per-event CARs for windows  
+      `[-1,+1]`, `[-2,+2]`, `[0,+1]`, `[0,+2]`, `[0,+5]`, `[+1,+5]`, `[+1,+7]`.
+  - `step2_event_AR_long_cn.csv`  
+    - Columns: `Ticker`, `EventType`, `Source`, `EventDate`, `EventDate_adj`, `k`, `Date`, `AR`, `AVol`, `Bundled_Flag`.  
+  **Used in:**
+  - CN baseline returns and sample overview (Step 4).
+  - CN dynamic/staggered effects (Step 5).
+  - CN abnormal-volume profiles (Step 7).
+  - CN controls and robustness/placebos (Steps 6–8).
+
+> The older “Step 2 (CN, fixed)” script is superseded by this extended version and can be archived.
+
+---
+
+### Step 3 – CN text features and AI labels
+
+- `CN Step 3: Text features and event-level variables for SSE 50 (CN)`  
+  **Purpose:** Run the Chinese text pipeline and construct section- and event-level AI variables.  
+  **Input:**
+  - `events_cn_collapsed.xlsx`  
+    - Sheets: `EC_collapsed` (earnings calls) and `QR_raw` (reports) with `Ticker`, `EventDate`, `Source`, `File Path`, `InlineText`.  
+  **Output:**
+  - `text_features_by_event_sections_cn.xlsx`  
+    - Sheet `Features`: one row per (Ticker, EventDate, EventType, Section) with:
+      - AI section intensities, Talk/Realized cues, specificity, tone, etc.
+    - Sheet `Quality`: document-level coverage/quality diagnostics.
+  - `text_eventvars_cn.csv`  
+    - One row per event with:
+      - `Ticker`, `EventDate`, `EventType`
+      - `AI_Talk_Intensity`, `AI_Realized_Index`, `Tone`, `AI_Specificity`,
+      - `AI_Windows`, `Has_AI`
+      - `Talk_Flag`, `Realized_Flag`.  
+  **Used in:**
+  - CN Figure 1 (time series of AI events).
+  - Table 1 Panel B (CN sample overview).
+  - CN baseline CAR regressions (AI subsample).
+  - CN dynamic/event-time profiles (labeling).
+  - CN abnormal-volume profiles (Talk vs Realized).
+  - CN controls on returns and placebos (Steps 8–9).
+
+> The auxiliary script that patches `text_eventvars_cn.csv` to add extra label maps (`text_eventvars_cn_with_labels.csv`, `label_map_cn.csv`) is not used in the main pipeline and can be archived.
+
+---
+
+### Step 4 – CN baseline returns, sample overview, and time series
+
+- `step_4_cn_build_analysis_and_tables.py`  
+  **Purpose:** Merge CN CARs with AI variables and build baseline table inputs.  
+  **Input:**
+  - `event_AR_CAR_cn.xlsx` (from Step 2)
+  - `text_features_by_event_sections_cn.xlsx` (from Step 3)  
+  **Output:**
+  - `day0_by_channel_cn.csv`  
+    - Day-0 AR/return statistics by channel.
+  - `table4_baseline_by_channel_cn.csv`  
+    - Baseline CN CAR regressions by channel and window.  
+  **Used in:** CN baseline CAR table (Table 4, CN panels).
+
+- `step_4_cn_fig1_timeseries.py`  
+  **Purpose:** CN panel of Figure 1 (time series of AI events and Realized share).  
+  **Input:**
+  - `text_eventvars_cn.csv`
+  - `text_features_by_event_sections_cn.xlsx`  
+  **Output:**
+  - `fig1_timeseries_events_cn.csv`
+  - `fig1_timeseries_events_cn.png`  
+  **Used in:** Figure 1, CN sub-panel.
+
+- `step_4_cn_sample_overview_table1.py`  
+  **Purpose:** CN sample overview for Table 1, Panel B.  
+  **Input:**
+  - `event_AR_CAR_cn.xlsx`
+  - `text_features_by_event_sections_cn.xlsx`  
+  **Output:**
+  - `table1_sample_overview_cn.csv`  
+    - Counts and shares by channel (`EC`/`QR`) and AI label (None/Talk/Realized/Talk & Realized).
+
+- `step_4_cn_table2_baseline.py`  
+  **Purpose:** Baseline CN CAR regressions on the **AI subsample**  
+  (`Talk_Flag = 1` or `Realized_Flag = 1`) so that Ns line up with Table 1 Panel B.  
+  **Output:**
+  - CN baseline table CSV (used in the main baseline returns table, CN columns).
+
+---
+
+### Step 5 – CN dynamic (event-time) effects
+
+- `step_5_cn_event_time.py`  
+  **Purpose:** Stacked Sun–Abraham dynamic profiles for CN AI events.  
+  **Input:**
+  - `clean_panel_cn_with_volume.xlsx` (Step 1b)
+  - `text_eventvars_cn.csv` (Step 3)  
+  **Output:**
+  - `fig_event_time_profiles_cn.csv`  
+    - Mean AR by `k`, channel, and AI label (Talk / Realized).
+  - `table3_pretrend_tests_cn.csv`  
+    - Joint pre-trend and cumulative post-event tests.
+  - `fig2_event_time_CN.png` (optional quick plot).  
+  **Used in:** Figure 2 (CN) and event-time discussion in the main text.
+
+- `step_5_cn_dynamic_staggered.py`  
+  **Purpose:** Staggered Realized-only event-time regression using daily AR from `step2_event_AR_long_cn.csv`.  
+  **Input:**
+  - `step2_event_AR_long_cn.csv`
+  - `text_features_by_event_sections_cn.xlsx`  
+  **Output:**
+  - `dynamic_staggered_cn.csv` (Region = CN, pooled EC+QR Realized profile).  
+  **Used in:** CN dynamic (staggered) section and the CN Realized pre-trend F-test reported in the text.
+
+- `step_5b_fig2_event_time_profiles_cn.py`  
+  **Purpose:** Final CN Figure 2 plot from the stacked profiles.  
+  **Input:**
+  - `fig_event_time_profiles_cn.csv`  
+  **Output:**
+  - `fig2_event_time_profiles_cn.png` (Figure 2, CN panel).
+
+---
+
+### Step 6 – CN robustness (Table 8)
+
+- `step_6_cn_robustness_and_placebos.py`  
+  **Purpose:** Robustness checks for CN baseline CARs (alt windows, overlap drops, winsorisation, etc.).  
+  **Input:**
+  - `event_AR_CAR_cn.xlsx`
+  - `text_eventvars_cn.csv`  
+  **Output:**
+  - `table8_robustness_cn.csv`  
+  **Used in:** CN panels/rows of the robustness table (Table 8).
+
+---
+
+### Step 7 – CN abnormal volume and attention (Figure 3 CN)
+
+- `step_7_cn_abnormal_volume_profiles.py`  
+  **Purpose:** CN abnormal trading-volume profiles around AI events.  
+  **Input:**
+  - `clean_panel_cn_with_volume.xlsx` (from Step 1b)
+  - `event_AR_CAR_cn.xlsx` (event dates)
+  - `text_features_by_event_sections_cn.xlsx` (AI labels / flags)  
+  **Output:**
+  - `step7_cn_avol_long.csv`  
+    - long format abnormal volume by `Ticker`, `EventType`, `k`, AI label.
+  - `fig3_abnormal_volume_CN.png`  
+    - CN earnings-call and report panels for the abnormal-volume figure.  
+  **Used in:** Figure 3 (CN) and trading-volume discussion.
+
+---
+
+### Step 8 – CN controls on returns (Table 6, Panels C–D)
+
+- `step_8_cn_controls_on_returns.py`  
+  **Purpose:** Event-level CAR regressions with disclosure controls for CN.  
+  **Input:**
+  - `event_AR_CAR_cn.xlsx` (EC/QR CARs by window)
+  - `text_eventvars_cn.csv` (preferred) or `text_features_by_event_sections_cn.xlsx`  
+  **Output:**
+  - `table6_controls_cn.csv`  
+    - One row per `(EventType, Window)` with:
+      - `N`, constant, `Realized` coefficient, standard errors,
+      - list of controls used.  
+  **Windows:** `[-1,+1]`, `[-2,+2]`, `[+1,+5]`, `[+1,+7]`.  
+  **Used in:** Table 6, Panels C–D (CN EC/QR with disclosure controls).
+
+---
+
+### Step 9 – CN results pack and placebos (Table 9)
+
+- `CN Step 9: Pack CN tables/figures into one Excel and emit LaTeX stubs`  
+  **Purpose:** Collect CN outputs and provide a compact results pack.  
+  **Input:**
+  - `day0_by_channel_cn.csv`
+  - `table4_baseline_by_channel_cn.csv`
+  - `step7_cn_avol_long.csv` (optional)
+  - `table6_controls_cn.csv` (optional)  
+  **Output:**
+  - `CN_results_tables.xlsx` (Excel file with key CN tables)
+  - `tab_cn_baseline.tex` (LaTeX stub for CN baseline table).
+
+- `step_9_table9_placebos_timing_cn.py`  
+  **Purpose:** CN placebos and timing stress tests aligned with the baseline CN CAR spec.  
+  **Input:**
+  - `event_AR_CAR_cn.xlsx`
+  - `text_features_by_event_sections_cn.xlsx`  
+  **Output:**
+  - `table9_placebos_timing_cn.csv`  
+    - CN rows for Table 9 (Baseline, Drop overlaps, Content placebo, Timing placebo).
