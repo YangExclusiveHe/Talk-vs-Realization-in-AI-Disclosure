@@ -1,0 +1,37 @@
+# =====================================
+# Core numerical & data stack (EU & CN)
+# =====================================
+numpy>=1.23
+pandas>=1.5
+scipy>=1.10
+statsmodels>=0.14
+
+# ==========
+# Plotting
+# ==========
+matplotlib>=3.7
+
+# =================================
+# Excel / file I/O / PDF handling
+# =================================
+openpyxl>=3.1
+XlsxWriter>=3.1
+pdfminer.six>=20221105
+
+# ============================
+# Chinese text processing
+# ============================
+jieba>=0.42.1
+
+# ==========================================
+# Transformers-based models (EU & CN text)
+# ==========================================
+# Used for FinBERT / Chinese-Financial models and tone measures.
+transformers>=4.40.0
+torch>=2.2.0
+sentencepiece>=0.1.99
+
+# ==========================================
+# Windows Excel → PDF export
+# ==========================================
+pywin32>=306
