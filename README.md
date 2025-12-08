@@ -1,4 +1,4 @@
-## Part I – EU pipeline (STOXX 50)
+## EU pipeline (STOXX 50)
 
 This section documents the Python scripts for the European sample and maps each
 step to the corresponding intermediate files, tables, and figures in the thesis.
